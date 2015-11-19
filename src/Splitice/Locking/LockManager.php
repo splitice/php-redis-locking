@@ -1,6 +1,9 @@
 <?php
 namespace Splitice\Locking;
 
+use Predis\Client as RedisClient;
+use Splitice\ResourceFactory;
+
 class LockManager
 {
 	const USLEEP = 250000;
@@ -9,11 +12,17 @@ class LockManager
 	private $default_timeout;
 	private $key_prefix;
 
+	/**
+	 * @var ResourceFactory
+	 */
+	private $resource_factory;
+
 	function __construct($default_timeout = 60, $redis_name = 'redis', $key_prefix = 'Lock:')
 	{
 		$this->default_timeout = $default_timeout;
 		$this->redis_name = $redis_name;
 		$this->key_prefix = $key_prefix;
+		$this->resource_factory = ResourceFactory::getInstance();
 	}
 
 	/**
@@ -29,18 +38,18 @@ class LockManager
 	{
 		if (!$key) throw new LockException("Invalid Key");
 
-		/** @var \Predis\Client $redis */
-		$redis = \Splitice\ResourceFactory::getInstance()->get($this->redis_name);
+		/** @var RedisClient $redis */
+		$redis = $this->resource_factory->get($this->redis_name);
 		$end_time = time() + $timeout;
 		$key = $this->key($key);
 
 		do {
-			$expire = $this->timeout($ttl);
+			$expire = $this->expire_time($ttl);
 			if ($acquired = ($redis->setnx($key, $expire))) {
 				$acquired = new Lock($key, $expire, $redis);
 				break;
 			}
-			if ($acquired = ($this->recover($key))) {
+			if ($acquired = ($this->recover($redis, $key))) {
 				break;
 			}
 			if ($timeout === 0) break;
@@ -62,7 +71,7 @@ class LockManager
 	 * @param $ttl
 	 * @return int    timeout
 	 */
-	protected function timeout($ttl)
+	protected function expire_time($ttl)
 	{
 		if ($ttl === null) {
 			$ttl = $this->default_timeout;
@@ -72,18 +81,16 @@ class LockManager
 
 	/**
 	 * Recover an abandoned lock
+	 * @param RedisClient $redis
 	 * @param  mixed $key Item to lock
 	 * @param null $ttl
-	 * @return bool    Was the lock acquired?
+	 * @return bool Was the lock acquired?
 	 */
-	protected function recover($key, $ttl = null)
+	protected function recover(RedisClient $redis, $key, $ttl = null)
 	{
-		/** @var \Predis\Client $redis */
-		$redis = \Splitice\ResourceFactory::getInstance()->get($this->redis_name);
-
 		if (($lockTimeout = $redis->get($key)) > time()) return false;
 
-		$expire = $this->timeout($ttl);
+		$expire = $this->expire_time($ttl);
 		$currentTimeout = $redis->getset($key, $expire);
 
 		if ($currentTimeout != $lockTimeout) return false;
