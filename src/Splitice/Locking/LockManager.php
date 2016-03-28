@@ -32,9 +32,9 @@ class LockManager
 	 * @param  int $ttl TTL (seconds)
 	 * @return Lock    The key
 	 * @throws LockException If the key is invalid
-	 * @throws LockTimeoutException If the lock is not acquired before the method times out
+	 * @throws LockTimeoutException If the lock is not acquired before the method times out and $ex true
 	 */
-	public function get($key, $timeout = null, $ttl = null)
+	public function get($key, $timeout = null, $ttl = null, $ex = false)
 	{
 		if (!$key) throw new LockException("Invalid Key");
 
@@ -57,7 +57,7 @@ class LockManager
 			usleep(self::USLEEP);
 		} while (!is_numeric($timeout) || time() < $end_time);
 
-		if (!$acquired) throw new LockTimeoutException("Timeout exceeded");
+		if (!$acquired && $ex) throw new LockTimeoutException("Timeout exceeded");
 		return $acquired;
 	}
 
