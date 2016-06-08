@@ -13,7 +13,7 @@
 	"require" : {
 		"php" : ">=5.3",
 		"splitice/resource-factory" : "dev-master",
-		"predis/predis" : "dev-master"
+		"predis/predis" : "~1.0"
 	},
     "require-dev": {
         "phpunit/phpunit": "3.7.*"
