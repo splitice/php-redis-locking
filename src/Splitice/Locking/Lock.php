@@ -1,6 +1,8 @@
 <?php
 namespace Splitice\Locking;
 
+use Splitice\Locking\Adapter\ILockAdapter;
+
 class Lock
 {
 	/**
@@ -22,10 +24,6 @@ class Lock
 	 */
 	public $released = false;
 
-	/**
-	 * @var \Predis\ClientInterface
-	 */
-	private $redis;
 
 	/**
 	 * Should the lock be persisted?
@@ -33,13 +31,24 @@ class Lock
 	 * @var bool
 	 */
 	private $persist;
+	/**
+	 * @var ILockAdapter
+	 */
+	private $adapter;
 
-	function __construct($key, $expire, \Predis\ClientInterface $redis)
+	/**
+	 * Lock constructor.
+	 * @param $key
+	 * @param $expire
+	 * @param ILockAdapter $adapter
+	 */
+	function __construct($key, $expire, ILockAdapter $adapter)
 	{
 		if (!$key) throw new LockException("Invalid Key");
 		$this->key = $key;
 		$this->expire = $expire;
-		$this->redis = $redis;
+
+		$this->adapter = $adapter;
 	}
 
 	/**
@@ -53,6 +62,28 @@ class Lock
 	}
 
 	/**
+	* Prevent the expiration of the lock for $ttl seconds
+	* @param $ttl integer seconds to potentially increase lock by
+	* @param null $only_if only if less than this remains
+	*/
+	function bump($ttl, $only_if = null){
+		if ($this->released) return;
+
+		// Check if expired
+		$now = time();
+		if($only_if !== null){
+			if($this->expire - $now >= $only_if){
+				return;
+			}
+		}
+		$new_expire = $now + $ttl;
+		if($new_expire > $this->expire){
+			$ttl = $this->adapter->ttl($this->key, $ttl);
+			$this->expire = $now + $ttl;
+		}
+	}
+
+	/**
 	 * Releases the lock, if it has not been released already
 	 */
 	public function release()
@@ -61,7 +92,7 @@ class Lock
 
 		// Only release the lock if it hasn't expired
 		if ($this->expire >= time()) {
-			$this->redis->del($this->key);
+			$this->adapter->release($this->key);
 		}
 		$this->released = true;
 	}
