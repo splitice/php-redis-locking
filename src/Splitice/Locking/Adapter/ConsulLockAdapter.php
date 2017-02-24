@@ -89,7 +89,7 @@ class ConsulLockAdapter implements ILockAdapter
 			$session_id = $this->kv->get($key);
 			if ($session_id) {
 				try {
-					$response = $this->session->renew(base64_decode($session_id->json()['Value']));
+					$response = $this->session->renew(base64_decode($session_id->json()[0]['Value']));
 					return substr($response->json()[0]['TTL'], 0, -1);
 				}catch(ClientException $ex){
 					if($ex->getCode() >= 400 && $ex->getCode() <= 404){
