@@ -1,6 +1,7 @@
 <?php
 namespace Splitice\Locking\Adapter;
 
+use SensioLabs\Consul\Exception\ClientException;
 use SensioLabs\Consul\ServiceFactory;
 use Splitice\Locking\Lock;
 use Splitice\ResourceFactory;
@@ -59,11 +60,20 @@ class ConsulLockAdapter implements ILockAdapter
 			$timeout = $ttl;
 		}
 
-		$session_id  = $sessionId = $this->session->create(array('TTL'=>$ttl.'s','LockDelay'=>$timeout.'s','Behavior'=>'delete'))->json()['ID'];
+		$session_id  = $this->session->create(array('TTL'=>min(max($ttl,7),24*60*60).'s','LockDelay'=>'1s','Behavior'=>'delete'))->json()['ID'];
 		if(!$session_id){
 			throw new \Exception('Failed to get session ID');
 		}
-		$acquired = $this->kv->put($key, $session_id, ['acquire' => $session_id])->json();
+
+		do {
+			$start_time = microtime(true);
+			$acquired = $this->kv->put($key, $session_id, ['acquire' => $session_id])->json();
+			if($acquired){
+				break;
+			}
+			usleep(600 + rand(0,400));
+			$timeout -= (microtime(true) - $start_time);
+		} while($timeout > 0);
 
 		if($acquired){
 			$expire = $this->expire_time($ttl);
@@ -75,20 +85,42 @@ class ConsulLockAdapter implements ILockAdapter
 
 	function ttl($key, $ttl)
 	{
-		$session_id = $this->kv->get($key);
-		if($session_id) {
-			$response = $this->session->renew($session_id);
-			return substr($response->json()[0]['TTL'],0,-1);
+		try {
+			$session_id = $this->kv->get($key);
+			if ($session_id) {
+				try {
+					$response = $this->session->renew(base64_decode($session_id->json()['Value']));
+					return substr($response->json()[0]['TTL'], 0, -1);
+				}catch(ClientException $ex){
+					if($ex->getCode() >= 400 && $ex->getCode() <= 404){
+						$this->get($key, $ttl, $ttl);
+					}else {
+						throw $ex;
+					}
+				}
+			}
+		}catch(ClientException $ex){
+			if($ex->getCode() == 404){
+				return 0;
+			}
+			throw $ex;
 		}
 		return 0;
 	}
 
 	function release($key)
 	{
-		$session_id = $this->kv->get($key);
+		try {
+			$session_id = $this->kv->get($key);
+		}catch(ClientException $ex){
+			if($ex->getCode() == 404){
+				return;
+			}
+			throw $ex;
+		}
 		if($session_id){
 			$this->kv->delete($key);
-			$this->session->destroy($session_id);
+			$this->session->destroy(base64_decode($session_id->json()[0]['Value']));
 		}
 	}
 

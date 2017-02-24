@@ -22,9 +22,8 @@ class LockManager
 	 * @param  mixed $key Item to lock
 	 * @param  int $timeout Time to wait for the key (seconds)
 	 * @param  int $ttl TTL (seconds)
-	 * @return Lock    The key
-	 * @throws LockException If the key is invalid
-	 * @throws LockTimeoutException If the lock is not acquired before the method times out and $ex true
+	 * @param bool $ex
+	 * @return Lock The key
 	 */
 	public function get($key, $timeout = null, $ttl = null, $ex = false)
 	{
