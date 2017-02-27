@@ -60,7 +60,7 @@ class ConsulLockAdapter implements ILockAdapter
 			$timeout = $ttl;
 		}
 
-		$session_id  = $this->session->create(array('TTL'=>min(max($ttl,7),24*60*60).'s','LockDelay'=>'1s','Behavior'=>'delete'))->json()['ID'];
+		$session_id  = $this->session->create(array('TTL'=>min(max($ttl,10),24*60*60).'s','LockDelay'=>'1s','Behavior'=>'delete'))->json()['ID'];
 		if(!$session_id){
 			throw new \Exception('Failed to get session ID');
 		}
@@ -100,7 +100,7 @@ class ConsulLockAdapter implements ILockAdapter
 				}
 			}
 		}catch(ClientException $ex){
-			if($ex->getCode() == 404){
+			if(strpos($ex->getMessage(), '404 - Not Found')){
 				return 0;
 			}
 			throw $ex;
@@ -113,7 +113,7 @@ class ConsulLockAdapter implements ILockAdapter
 		try {
 			$session_id = $this->kv->get($key);
 		}catch(ClientException $ex){
-			if($ex->getCode() == 404){
+			if(strpos($ex->getMessage(), '404 - Not Found')){
 				return;
 			}
 			throw $ex;
