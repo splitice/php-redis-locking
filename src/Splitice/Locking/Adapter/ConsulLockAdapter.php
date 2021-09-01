@@ -49,6 +49,16 @@ class ConsulLockAdapter implements ILockAdapter
 		$this->session = $client->get('session');
 	}
 
+    static function slaap($seconds)
+    {
+        $seconds = abs($seconds);
+        if ($seconds < 1):
+            usleep($seconds*1000000);
+        else:
+            sleep($seconds);
+        endif;
+    }
+
 	function get($key, $timeout = null, $ttl = null)
 	{
 		$key = $this->key($key);
@@ -71,7 +81,7 @@ class ConsulLockAdapter implements ILockAdapter
 			if($acquired){
 				break;
 			}
-			usleep(600 + rand(0,400));
+			self::slaap(1 +  (rand(0,30000)/10000));
 			$timeout -= (microtime(true) - $start_time);
 		} while($timeout > 0);
 
@@ -90,7 +100,9 @@ class ConsulLockAdapter implements ILockAdapter
 			if ($session_id) {
 				try {
 					$response = $this->session->renew(base64_decode($session_id->json()[0]['Value']));
-					return substr($response->json()[0]['TTL'], 0, -1);
+					$ttl_ret = $response->json()[0]['TTL'];
+					if(!$ttl_ret) return $ttl;
+					return substr($ttl_ret, 0, -1);
 				}catch(ClientException $ex){
 					if($ex->getCode() >= 400 && $ex->getCode() <= 404){
 						$this->get($key, $ttl, $ttl);

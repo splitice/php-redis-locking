@@ -78,8 +78,8 @@ class Lock
 		}
 		$new_expire = $now + $ttl;
 		if($new_expire > $this->expire){
-			$ttl = $this->adapter->ttl($this->key, $ttl);
-			$this->expire = $now + $ttl;
+			$this->adapter->ttl($this->key, $ttl);
+			$this->expire = $new_expire;
 		}
 	}
 
